@@ -1,12 +1,11 @@
 """
-더미 MCP 툴 구현
+쇼핑 에이전트용 도구 함수들
 """
 
 import asyncio
 import random
 from typing import List, Dict, Any
 from langchain_core.tools import tool
-from backend.models import ProductInfo
 from config import settings
 
 
@@ -136,6 +135,16 @@ def filter_products(products: List[Dict[str, Any]],
         filtered = [p for p in filtered if p.get("category", "").lower() == category.lower()]
     
     return filtered
+
+
+def get_shopping_tools() -> List:
+    """쇼핑 도구 목록 반환"""
+    return [
+        search_naver_shopping,
+        search_exa,
+        compare_prices,
+        filter_products
+    ]
 
 
 # 사용 가능한 모든 툴 목록
