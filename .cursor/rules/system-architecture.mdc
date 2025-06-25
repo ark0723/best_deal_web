@@ -1,0 +1,110 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 시스템 아키텍처
+
+## 아키텍처 구성요소
+- **프론트엔드**: Streamlit 기반 챗봇 UI
+- **백엔드**: FastAPI 기반 API 서버
+- **Agent**: LangGraph React Agent
+- **LLM**: Gemini-2.5-flash-preview-05-20
+- **MCP Tools**: Naver Search, Exa Search
+- **메모리**: LangGraph 로컬 메모리 모듈
+
+## 계층 구조
+```mermaid
+graph TB
+    subgraph "Presentation Layer"
+        UI[Streamlit UI]
+    end
+    
+    subgraph "API Layer"
+        API[FastAPI Server]
+    end
+    
+    subgraph "Business Logic Layer"
+        AGENT[LangGraph Agent]
+        MEMORY[Local Memory]
+    end
+    
+    subgraph "AI/ML Layer"
+        LLM[Gemini-2.5-flash]
+    end
+    
+    subgraph "External Services"
+        NAVER[Naver Search MCP]
+        EXA[Exa Search MCP]
+    end
+    
+    UI --> API
+    API --> AGENT
+    AGENT --> MEMORY
+    AGENT --> LLM
+    AGENT --> NAVER
+    AGENT --> EXA
+```
+
+## 모듈화 및 컴포넌트
+- **UI 컴포넌트**: 채팅 인터페이스, 결과 표시 모듈
+- **API 컴포넌트**: 메시지 처리, SSE 스트리밍 엔드포인트
+- **Agent 컴포넌트**: React Agent, 툴 호출 관리자, 응답 파서
+- **메모리 컴포넌트**: 대화 히스토리 관리
+- **검색 컴포넌트**: MCP 툴 래퍼
+
+## 데이터 흐름
+```mermaid
+sequenceDiagram
+    participant User as 사용자
+    participant UI as Streamlit UI
+    participant API as FastAPI
+    participant Agent as LangGraph Agent
+    participant Memory as Local Memory
+    participant LLM as Gemini
+    participant MCP as MCP Tools
+    
+    User->>UI: 상품명 입력
+    UI->>API: POST /chat (SSE)
+    API->>Agent: 메시지 전달
+    Agent->>Memory: 대화 히스토리 조회
+    Agent->>LLM: 검색 계획 생성
+    Agent->>MCP: 상품 검색 실행
+    MCP-->>Agent: 검색 결과 반환
+    Agent->>LLM: 결과 파싱 및 정리
+    Agent->>Memory: 대화 히스토리 저장
+    Agent-->>API: 스트리밍 응답
+    API-->>UI: SSE 스트림
+    UI-->>User: 실시간 결과 표시
+```
+
+## API 및 인터페이스
+- **REST API Endpoints**:
+  - `POST /chat`: 채팅 메시지 처리 (SSE 응답)
+  - `GET /health`: 서버 상태 확인
+- **SSE Interface**: 실시간 스트리밍 응답
+- **MCP Interface**: 검색 툴 통합 인터페이스
+- **Memory Interface**: 대화 컨텍스트 관리
+
+## 시스템 외부 환경과의 관계
+```mermaid
+graph LR
+    subgraph "Internal System"
+        SYS[Shopping Agent System]
+    end
+    
+    subgraph "External APIs"
+        NAVER_API[Naver Search API]
+        EXA_API[Exa Search API]
+        GEMINI_API[Google Gemini API]
+    end
+    
+    subgraph "User Environment"
+        BROWSER[웹 브라우저]
+    end
+    
+    BROWSER <--> SYS
+    SYS --> NAVER_API
+    SYS --> EXA_API
+    SYS --> GEMINI_API
+```

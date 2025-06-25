@@ -1,0 +1,110 @@
+name: PR 자동 댓글
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  pr-comment:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 코드 체크아웃
+      uses: actions/checkout@v4
+
+    - name: PR 정보 수집
+      id: pr-info
+      run: |
+        echo "pr_number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+        echo "pr_title=${{ github.event.pull_request.title }}" >> $GITHUB_OUTPUT
+        echo "pr_author=${{ github.event.pull_request.user.login }}" >> $GITHUB_OUTPUT
+        echo "base_branch=${{ github.event.pull_request.base.ref }}" >> $GITHUB_OUTPUT
+        echo "head_branch=${{ github.event.pull_request.head.ref }}" >> $GITHUB_OUTPUT
+
+    - name: 변경된 파일 수집
+      id: changed-files
+      uses: tj-actions/changed-files@v40
+      with:
+        files: |
+          **/*.py
+          **/*.yml
+          **/*.yaml
+          **/*.md
+
+    - name: 테스트 파일 확인
+      id: test-check
+      run: |
+        if [ -d "tests/" ]; then
+          test_files=$(find tests/ -name "*.py" -type f | wc -l)
+          echo "test_files_count=$test_files" >> $GITHUB_OUTPUT
+          echo "has_tests=true" >> $GITHUB_OUTPUT
+        else
+          echo "has_tests=false" >> $GITHUB_OUTPUT
+          echo "test_files_count=0" >> $GITHUB_OUTPUT
+        fi
+
+    - name: PR 체크리스트 댓글 생성
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+
+          const botComment = comments.find(comment => 
+            comment.user.type === 'Bot' && 
+            comment.body.includes('## 📋 PR 체크리스트')
+          );
+
+          const changedFiles = `${{ steps.changed-files.outputs.all_changed_files }}`.split(' ');
+          const pythonFiles = changedFiles.filter(file => file.endsWith('.py'));
+          const testFiles = changedFiles.filter(file => file.includes('test'));
+
+          const commentBody = `## 📋 PR 체크리스트
+
+          안녕하세요 @${{ steps.pr-info.outputs.pr_author }}님! PR을 생성해 주셔서 감사합니다. 🎉
+
+          ### 📊 PR 정보
+          - **베이스 브랜치**: \`${{ steps.pr-info.outputs.base_branch }}\`
+          - **헤드 브랜치**: \`${{ steps.pr-info.outputs.head_branch }}\`
+          - **변경된 Python 파일**: ${pythonFiles.length}개
+          - **테스트 파일**: ${testFiles.length}개
+
+          ### ✅ 체크리스트
+          머지하기 전에 다음 항목들을 확인해주세요:
+
+          - [ ] 🧪 **테스트 코드 작성**: 새로운 기능이나 버그 수정에 대한 테스트 코드가 추가되었나요?
+          - [ ] 📖 **문서 업데이트**: README나 관련 문서가 업데이트되었나요?
+          - [ ] 🔍 **코드 리뷰**: 코드 리뷰를 요청하셨나요?
+          - [ ] 🏗️ **빌드 성공**: 모든 테스트가 통과하나요?
+          - [ ] 📝 **커밋 메시지**: 커밋 메시지가 명확하고 규칙에 맞나요?
+
+          ### 🚀 자동 검사 결과
+          - **테스트 디렉토리 존재**: ${{ steps.test-check.outputs.has_tests }}
+          - **테스트 파일 수**: ${{ steps.test-check.outputs.test_files_count }}개
+
+          ### 📋 추가 안내
+          - 이 PR이 이슈와 관련이 있다면 \`Closes #이슈번호\`를 PR 설명에 추가해주세요.
+          - 변경사항이 크다면 단계별로 나누어서 PR을 생성하는 것을 고려해보세요.
+          - 질문이 있으시면 언제든지 댓글로 문의해주세요!
+
+          ---
+          🤖 이 댓글은 자동으로 생성되었습니다.`;
+
+          if (botComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: commentBody
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: commentBody
+            });
+          } 

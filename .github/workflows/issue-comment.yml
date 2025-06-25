@@ -1,0 +1,254 @@
+name: 이슈 자동 댓글
+
+on:
+  issues:
+    types: [opened, reopened]
+
+jobs:
+  issue-comment:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 이슈 정보 분석
+      id: issue-analysis
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const issue = context.payload.issue;
+          const title = issue.title.toLowerCase();
+          const body = (issue.body || '').toLowerCase();
+          
+          // 이슈 타입 분석
+          const issueTypes = {
+            'bug': ['bug', 'error', 'issue', 'problem', 'fail', '버그', '오류', '문제', '실패'],
+            'feature': ['feature', 'enhancement', 'improve', '기능', '개선', '추가'],
+            'question': ['question', 'help', 'how', '질문', '도움', '어떻게'],
+            'documentation': ['doc', 'document', 'readme', '문서', '설명'],
+            'security': ['security', 'vulnerability', 'cve', '보안', '취약점'],
+            'performance': ['performance', 'slow', 'speed', '성능', '느림', '속도']
+          };
+          
+          let detectedType = 'general';
+          for (const [type, keywords] of Object.entries(issueTypes)) {
+            if (keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
+              detectedType = type;
+              break;
+            }
+          }
+          
+          // 우선순위 분석
+          const priorityKeywords = {
+            'critical': ['critical', 'urgent', 'emergency', 'breaking', '긴급', '크리티컬', '중단'],
+            'high': ['high', 'important', 'serious', '높음', '중요', '심각'],
+            'low': ['low', 'minor', 'trivial', '낮음', '사소', '미미']
+          };
+          
+          let priority = 'medium';
+          for (const [level, keywords] of Object.entries(priorityKeywords)) {
+            if (keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
+              priority = level;
+              break;
+            }
+          }
+          
+          return {
+            type: detectedType,
+            priority: priority,
+            number: issue.number,
+            title: issue.title,
+            author: issue.user.login,
+            hasTemplate: body.includes('## ') || body.includes('### ')
+          };
+
+    - name: 타입별 맞춤 댓글 생성
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const analysis = ${{ steps.issue-analysis.outputs.result }};
+          
+          let welcomeMessage = `👋 안녕하세요 @${analysis.author}님! 이슈를 생성해 주셔서 감사합니다.\n\n`;
+          
+          // 타입별 안내 메시지
+          const typeMessages = {
+            'bug': {
+              emoji: '🐛',
+              title: '버그 신고',
+              message: `버그를 신고해 주셔서 감사합니다. 빠른 해결을 위해 다음 정보를 확인해 주세요:
+
+              **🔍 확인 사항:**
+              - [ ] 문제를 재현할 수 있는 단계별 설명
+              - [ ] 예상 결과와 실제 결과
+              - [ ] 환경 정보 (OS, Python 버전, 브라우저 등)
+              - [ ] 에러 로그나 스크린샷
+              - [ ] 최신 버전에서도 동일한 문제가 발생하는지 확인
+
+              **⚡ 다음 단계:**
+              1. 개발팀이 24시간 내에 이슈를 확인합니다
+              2. 재현 가능한 경우 우선순위를 할당합니다
+              3. 수정 계획을 공유드립니다`
+            },
+            'feature': {
+              emoji: '✨',
+              title: '기능 요청',
+              message: `새로운 기능을 제안해 주셔서 감사합니다! 다음 정보를 추가로 제공해 주시면 더 좋은 기능을 만들 수 있습니다:
+
+              **💡 검토 사항:**
+              - [ ] 기능이 필요한 구체적인 사용 사례
+              - [ ] 현재의 대안이나 워크어라운드
+              - [ ] 기대하는 동작 방식
+              - [ ] 관련 참고 자료나 예시
+
+              **🚀 다음 단계:**
+              1. 제품 팀이 요청사항을 검토합니다
+              2. 기술적 타당성을 평가합니다
+              3. 개발 로드맵에 포함 여부를 결정합니다`
+            },
+            'question': {
+              emoji: '❓',
+              title: '질문',
+              message: `질문해 주셔서 감사합니다! 빠른 답변을 위해 다음을 확인해 보세요:
+
+              **📚 먼저 확인해 보세요:**
+              - [ ] [README.md](../README.md) 문서 확인
+              - [ ] [문서 폴더](../docs/) 확인
+              - [ ] 기존 이슈에서 유사한 질문이 있는지 검색
+
+              **💬 답변 받기:**
+              - 커뮤니티 멤버들이 도움을 드릴 예정입니다
+              - 복잡한 질문의 경우 개발팀이 직접 답변드립니다
+              - 추가 정보가 필요하면 댓글로 요청드리겠습니다`
+            },
+            'documentation': {
+              emoji: '📖',
+              title: '문서 관련',
+              message: `문서 개선을 제안해 주셔서 감사합니다! 좋은 문서는 모든 사용자에게 도움이 됩니다.
+
+              **✏️ 문서 개선:**
+              - [ ] 어떤 부분이 불명확한지 구체적으로 설명
+              - [ ] 추가가 필요한 예시나 설명
+              - [ ] 오타나 잘못된 정보 지적
+
+              **📝 기여 방법:**
+              - 직접 문서를 수정하여 PR을 생성해 주셔도 좋습니다
+              - 수정이 어려우시면 상세한 피드백을 남겨주세요`
+            },
+            'security': {
+              emoji: '🔒',
+              title: '보안 관련',
+              message: `⚠️ **보안 관련 이슈**는 매우 중요합니다.
+
+              **🚨 중요 안내:**
+              - 심각한 보안 취약점은 이슈 대신 비공개로 신고해 주세요
+              - 이메일: [보안팀 이메일 주소]
+              - 공개적으로 알려지면 안 되는 정보는 포함하지 마세요
+
+              **🔍 검토 과정:**
+              - 보안팀이 즉시 검토합니다
+              - 필요시 비공개 논의를 진행합니다
+              - 수정 후 보안 공지를 발행합니다`
+            },
+            'performance': {
+              emoji: '⚡',
+              title: '성능 관련',
+              message: `성능 개선을 제안해 주셔서 감사합니다!
+
+              **📊 성능 정보:**
+              - [ ] 구체적인 성능 측정 결과
+              - [ ] 비교 대상이나 기준점
+              - [ ] 재현 가능한 테스트 케이스
+              - [ ] 환경 정보 (하드웨어, 데이터 크기 등)
+
+              **🎯 최적화 과정:**
+              - 성능 프로파일링을 진행합니다
+              - 병목 지점을 식별합니다
+              - 최적화 방안을 검토하고 적용합니다`
+            },
+            'general': {
+              emoji: '💬',
+              title: '일반 이슈',
+              message: `이슈를 생성해 주셔서 감사합니다!
+
+              **📋 효과적인 이슈 작성을 위한 팁:**
+              - 제목에 문제나 요청사항을 명확히 기술
+              - 상황을 재현할 수 있는 정보 제공
+              - 관련 스크린샷이나 로그 첨부
+              - 기대하는 결과 설명
+
+              **⏰ 응답 시간:**
+              - 일반적으로 1-2일 내에 첫 응답을 드립니다
+              - 긴급한 경우 제목에 [긴급] 태그를 추가해 주세요`
+            }
+          };
+
+          const typeInfo = typeMessages[analysis.type] || typeMessages['general'];
+          
+          let comment = welcomeMessage;
+          comment += `## ${typeInfo.emoji} ${typeInfo.title}\n\n`;
+          comment += `${typeInfo.message}\n\n`;
+          
+          // 우선순위별 추가 안내
+          if (analysis.priority === 'critical') {
+            comment += `🚨 **긴급 이슈로 분류되었습니다**\n`;
+            comment += `- 개발팀이 즉시 확인하고 대응합니다\n`;
+            comment += `- 필요시 핫픽스 릴리스를 고려합니다\n\n`;
+          } else if (analysis.priority === 'high') {
+            comment += `⚠️ **높은 우선순위로 분류되었습니다**\n`;
+            comment += `- 다음 스프린트에서 우선적으로 처리됩니다\n\n`;
+          }
+          
+          // 템플릿 사용 여부에 따른 안내
+          if (!analysis.hasTemplate) {
+            comment += `💡 **더 나은 지원을 위한 제안:**\n`;
+            comment += `이슈 템플릿을 사용하시면 더 빠르고 정확한 지원을 받을 수 있습니다.\n`;
+            comment += `다음번에는 이슈 생성 시 제공되는 템플릿을 사용해 보세요!\n\n`;
+          }
+
+          comment += `---\n`;
+          comment += `**유용한 링크:**\n`;
+          comment += `- 📚 [프로젝트 문서](../README.md)\n`;
+          comment += `- 🤝 [기여 가이드](../CONTRIBUTING.md)\n`;
+          comment += `- 💬 [커뮤니티 채팅](../discussions)\n`;
+          comment += `- 🐛 [버그 신고 템플릿](.github/ISSUE_TEMPLATE/bug_report.md)\n`;
+          comment += `- ✨ [기능 요청 템플릿](.github/ISSUE_TEMPLATE/feature_request.md)\n\n`;
+          
+          comment += `🤖 이 댓글은 자동으로 생성되었습니다. 추가 도움이 필요하시면 언제든 댓글로 문의해 주세요!`;
+
+          await github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            body: comment
+          });
+
+    - name: 이슈 상태 업데이트 댓글 (재오픈된 경우)
+      if: github.event.action == 'reopened'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const analysis = ${{ steps.issue-analysis.outputs.result }};
+          
+          const reopenComment = `🔄 **이슈가 재오픈되었습니다**
+
+          안녕하세요 @${analysis.author}님! 이슈가 다시 오픈되었습니다.
+
+          **재오픈 이유를 확인해 주세요:**
+          - [ ] 문제가 완전히 해결되지 않았나요?
+          - [ ] 새로운 정보나 증상이 발견되었나요?
+          - [ ] 다른 환경에서 같은 문제가 발생했나요?
+
+          **다음 단계:**
+          - 재오픈 이유를 댓글로 설명해 주세요
+          - 개발팀이 상황을 재검토합니다
+          - 필요시 추가 조사를 진행합니다
+
+          빠른 해결을 위해 자세한 정보를 제공해 주시면 감사하겠습니다! 🙏
+
+          ---
+          🤖 자동 생성된 댓글입니다.`;
+
+          await github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            body: reopenComment
+          }); 

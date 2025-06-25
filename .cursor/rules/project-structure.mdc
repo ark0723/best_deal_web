@@ -1,0 +1,64 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 프로젝트 폴더 구조
+
+## 폴더 트리
+
+```
+test/
+├── backend/
+│   ├── __init__.py
+│   ├── main.py                     # FastAPI 애플리케이션 진입점
+│   ├── api/
+│   │   ├── __init__.py
+│   │   ├── chat.py                 # 채팅 엔드포인트
+│   │   └── health.py               # 헬스체크 엔드포인트
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── agent_service.py        # LangGraph Agent 서비스
+│   │   └── streaming_service.py    # SSE 스트리밍 서비스
+│   ├── agents/
+│   │   ├── __init__.py
+│   │   ├── shopping_agent.py       # 쇼핑 검색 Agent
+│   │   └── tools/
+│   │       ├── __init__.py
+│   │       ├── naver_search.py     # 네이버 검색 MCP 툴
+│   │       └── exa_search.py       # Exa 검색 MCP 툴
+│   ├── models/
+│   │   ├── __init__.py
+│   │   ├── chat_models.py          # 채팅 요청/응답 모델
+│   │   └── product_models.py       # 상품 정보 모델
+│   └── config/
+│       ├── __init__.py
+│       └── settings.py             # 환경 설정
+├── frontend/
+│   ├── __init__.py
+│   ├── app.py                      # Streamlit 메인 애플리케이션
+│   ├── components/
+│   │   ├── __init__.py
+│   │   ├── chat_interface.py       # 채팅 인터페이스 컴포넌트
+│   │   └── product_display.py      # 상품 결과 표시 컴포넌트
+│   ├── services/
+│   │   ├── __init__.py
+│   │   └── api_client.py           # 백엔드 API 클라이언트
+│   └── utils/
+│       ├── __init__.py
+│       └── sse_handler.py          # SSE 처리 유틸리티
+├── docs/
+│   ├── ux-wireframe.md
+│   └── chatbot-wireframe.svg
+├── .cursor/
+│   └── rules/
+│       ├── project-goals-scope.mdc
+│       ├── user-scenario.mdc
+│       ├── prd-requirements.mdc
+│       ├── tech-stack.mdc
+│       ├── system-architecture.mdc
+│       └── api-specification.mdc
+├── requirements.txt                # Python 의존성
+├── .env.example                    # 환경 변수 예시
+├── .gitignore
+└── README.md

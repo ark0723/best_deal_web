@@ -1,0 +1,102 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 개발 태스크 정의
+
+## Task ID
+
+| Task ID | Title |
+|---------|-------|
+| T001 | 프로젝트 환경 설정 |
+| T002 | 백엔드 API 서버 구축 |
+| T003 | LangGraph Agent 개발 |
+| T004 | MCP 검색 툴 통합 |
+| T005 | 프론트엔드 챗봇 UI 개발 |
+| T006 | SSE 스트리밍 통합 |
+| T007 | 시스템 통합 테스트 |
+
+## Title
+
+| Task ID | Title |
+|---------|-------|
+| T001 | 프로젝트 환경 설정 |
+| T002 | 백엔드 API 서버 구축 |
+| T003 | LangGraph Agent 개발 |
+| T004 | MCP 검색 툴 통합 |
+| T005 | 프론트엔드 챗봇 UI 개발 |
+| T006 | SSE 스트리밍 통합 |
+| T007 | 시스템 통합 테스트 |
+
+## Description
+
+| Task ID | Description |
+|---------|-------------|
+| T001 | Python 3.11 환경, 의존성 설치, 폴더 구조 생성 |
+| T002 | FastAPI 서버, 채팅/헬스체크 엔드포인트 구현 |
+| T003 | Gemini LLM 기반 React Agent, 메모리 모듈 구현 |
+| T004 | Naver Search, Exa Search MCP 툴 연동 |
+| T005 | Streamlit 기반 채팅 인터페이스, 상품 결과 표시 |
+| T006 | 실시간 스트리밍 응답 처리, 프론트-백엔드 연동 |
+| T007 | 전체 시스템 동작 검증, 성능 테스트 |
+
+## Status
+
+| Task ID | Status |
+|---------|--------|
+| T001 | TODO |
+| T002 | TODO |
+| T003 | TODO |
+| T004 | TODO |
+| T005 | TODO |
+| T006 | TODO |
+| T007 | TODO |
+
+## Dependencies
+
+| Task ID | Dependencies |
+|---------|-------------|
+| T001 | - |
+| T002 | T001 |
+| T003 | T001 |
+| T004 | T001, T003 |
+| T005 | T001 |
+| T006 | T002, T005 |
+| T007 | T002, T003, T004, T005, T006 |
+
+## Priority
+
+| Task ID | Priority |
+|---------|----------|
+| T001 | HIGH |
+| T002 | HIGH |
+| T003 | HIGH |
+| T004 | MEDIUM |
+| T005 | HIGH |
+| T006 | MEDIUM |
+| T007 | LOW |
+
+## Details
+
+| Task ID | Details |
+|---------|---------|
+| T001 | requirements.txt 작성, 가상환경 설정, 폴더 구조 생성, 기본 설정 파일 |
+| T002 | FastAPI 앱 초기화, /chat, /health 엔드포인트, 요청/응답 모델 정의 |
+| T003 | LangGraph React Agent 구성, Gemini LLM 연동, 로컬 메모리 설정 |
+| T004 | Naver/Exa Search MCP 클라이언트, 상품 정보 파싱 로직 |
+| T005 | Streamlit 채팅 UI, 메시지 입력/표시, 상품 리스트 컴포넌트 |
+| T006 | SSE 이벤트 스트림, 실시간 응답 처리, API 클라이언트 연동 |
+| T007 | 전체 플로우 테스트, 성능 검증, 버그 수정 |
+
+## Test Strategy
+
+| Task ID | Test Strategy |
+|---------|---------------|
+| T001 | 환경 설정 검증, 의존성 설치 확인 |
+| T002 | API 엔드포인트 단위 테스트, 요청/응답 검증 |
+| T003 | Agent 응답 테스트, 메모리 기능 검증 |
+| T004 | MCP 툴 연동 테스트, 검색 결과 파싱 검증 |
+| T005 | UI 컴포넌트 테스트, 사용자 인터랙션 검증 |
+| T006 | SSE 스트리밍 테스트, 실시간 통신 검증 |
+| T007 | 전체 시나리오 테스트, 성능 및 안정성 검증 |

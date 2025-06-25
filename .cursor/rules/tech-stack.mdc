@@ -1,0 +1,39 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 기술 스택
+
+## 프론트엔드
+- **Framework**: Streamlit
+- **Language**: Python 3.11
+- **UI Components**: 
+  - 챗봇 인터페이스
+  - 실시간 스트리밍 응답 표시
+  - 상품 검색 결과 리스트 표시
+- **통신**: SSE (Server-Sent Events) 방식으로 백엔드와 실시간 통신
+
+## 백엔드
+- **Framework**: FastAPI
+- **Language**: Python 3.11
+- **API Architecture**: RESTful API
+- **실시간 통신**: SSE (Server-Sent Events) 지원
+- **Features**:
+  - 챗봇 메시지 처리 엔드포인트
+  - Agent와의 통신 인터페이스
+  - 스트리밍 응답 처리
+
+## Agent
+- **Framework**: LangGraph
+- **Agent Type**: Pre-built React Agent
+- **Monitoring**: LangSmith
+- **LLM**: Gemini-2.5-flash-preview-05-20
+- **Memory**: LangGraph 로컬 메모리 모듈 (멀티턴 대화 지원)
+- **MCP Tools**:
+  - Naver Search: 네이버 쇼핑 검색
+  - Exa Search: 범용 인터넷 검색
+- **기능**:
+  - 상품 검색 및 정보 수집
+  - 가격 비교 및 파싱
+  - 대화 컨텍스트 관리

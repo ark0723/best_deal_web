@@ -1,0 +1,247 @@
+name: PR 자동 라벨링
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 코드 체크아웃
+      uses: actions/checkout@v4
+
+    - name: 변경된 파일 분석
+      id: changed-files
+      uses: tj-actions/changed-files@v40
+      with:
+        files_yaml: |
+          backend:
+            - 'backend/**'
+            - '**/*api*'
+          frontend:
+            - 'frontend/**'
+            - '**/*ui*'
+            - '**/*component*'
+          agent:
+            - 'agent/**'
+            - '**/*agent*'
+          tests:
+            - 'tests/**'
+            - '**/*test*'
+          docs:
+            - 'docs/**'
+            - '**/*.md'
+            - '**/*.rst'
+          config:
+            - 'config.py'
+            - '**/*config*'
+            - '**/*.yml'
+            - '**/*.yaml'
+            - '.github/**'
+          python:
+            - '**/*.py'
+          requirements:
+            - 'requirements*.txt'
+            - 'Pipfile*'
+            - 'pyproject.toml'
+
+    - name: PR 제목 및 설명 분석
+      id: pr-analysis
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const title = '${{ github.event.pull_request.title }}';
+          const body = '${{ github.event.pull_request.body }}' || '';
+          const titleLower = title.toLowerCase();
+          const bodyLower = body.toLowerCase();
+          
+          // 타입별 키워드 분석
+          const typeKeywords = {
+            'bug': ['fix', 'bug', 'error', 'issue', '버그', '수정', '오류'],
+            'feature': ['feat', 'add', 'new', 'implement', '기능', '추가', '구현'],
+            'enhancement': ['improve', 'enhance', 'update', 'optimize', '개선', '향상', '최적화'],
+            'refactor': ['refactor', 'clean', 'restructure', '리팩토링', '정리', '재구성'],
+            'documentation': ['docs', 'document', 'readme', '문서'],
+            'breaking-change': ['breaking', 'major', 'break', '호환성'],
+            'security': ['security', 'vulnerability', 'cve', '보안'],
+            'performance': ['perf', 'performance', 'speed', 'fast', '성능', '속도'],
+            'hotfix': ['hotfix', 'urgent', 'critical', '긴급', '핫픽스']
+          };
+          
+          // 우선순위 키워드 분석
+          const priorityKeywords = {
+            'priority: critical': ['critical', 'urgent', 'emergency', '긴급', '크리티컬'],
+            'priority: high': ['high', 'important', '높음', '중요'],
+            'priority: low': ['low', 'minor', 'trivial', '낮음', '사소']
+          };
+          
+          let detectedLabels = [];
+          
+          // 타입 라벨 검출
+          for (const [label, keywords] of Object.entries(typeKeywords)) {
+            if (keywords.some(keyword => titleLower.includes(keyword) || bodyLower.includes(keyword))) {
+              detectedLabels.push(label);
+            }
+          }
+          
+          // 우선순위 라벨 검출
+          for (const [label, keywords] of Object.entries(priorityKeywords)) {
+            if (keywords.some(keyword => titleLower.includes(keyword) || bodyLower.includes(keyword))) {
+              detectedLabels.push(label);
+            }
+          }
+          
+          return detectedLabels;
+
+    - name: 라벨 목록 구성
+      id: label-list
+      uses: actions/github-script@v7
+      with:
+        script: |
+          let labels = [];
+          
+          // 변경된 파일 기반 라벨
+          if ('${{ steps.changed-files.outputs.backend_any_changed }}' === 'true') {
+            labels.push('area: backend');
+          }
+          if ('${{ steps.changed-files.outputs.frontend_any_changed }}' === 'true') {
+            labels.push('area: frontend');
+          }
+          if ('${{ steps.changed-files.outputs.agent_any_changed }}' === 'true') {
+            labels.push('area: agent');
+          }
+          if ('${{ steps.changed-files.outputs.tests_any_changed }}' === 'true') {
+            labels.push('area: tests');
+          }
+          if ('${{ steps.changed-files.outputs.docs_any_changed }}' === 'true') {
+            labels.push('area: documentation');
+          }
+          if ('${{ steps.changed-files.outputs.config_any_changed }}' === 'true') {
+            labels.push('area: config');
+          }
+          if ('${{ steps.changed-files.outputs.requirements_any_changed }}' === 'true') {
+            labels.push('dependencies');
+          }
+          
+          // PR 분석 기반 라벨 추가
+          const prLabels = ${{ steps.pr-analysis.outputs.result }};
+          if (prLabels && prLabels.length > 0) {
+            labels.push(...prLabels);
+          }
+          
+          // 변경 파일 수에 따른 크기 라벨
+          const changedFilesList = '${{ steps.changed-files.outputs.all_changed_files }}';
+          const fileCount = changedFilesList ? changedFilesList.split(' ').length : 0;
+          
+          if (fileCount <= 2) {
+            labels.push('size: small');
+          } else if (fileCount <= 10) {
+            labels.push('size: medium');
+          } else {
+            labels.push('size: large');
+          }
+          
+          // 브랜치 패턴 기반 라벨
+          const headBranch = '${{ github.event.pull_request.head.ref }}';
+          if (headBranch.startsWith('feature/')) {
+            labels.push('type: feature');
+          } else if (headBranch.startsWith('bugfix/') || headBranch.startsWith('fix/')) {
+            labels.push('type: bugfix');
+          } else if (headBranch.startsWith('hotfix/')) {
+            labels.push('type: hotfix');
+          } else if (headBranch.startsWith('refactor/')) {
+            labels.push('type: refactor');
+          }
+          
+          // 중복 제거
+          return [...new Set(labels)];
+
+    - name: 라벨 생성 (존재하지 않는 라벨들)
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const labelsToCreate = [
+            { name: 'area: backend', color: '0052cc', description: 'Backend related changes' },
+            { name: 'area: frontend', color: '0e8a16', description: 'Frontend related changes' },
+            { name: 'area: agent', color: 'd4c5f9', description: 'AI Agent related changes' },
+            { name: 'area: tests', color: 'f9d0c4', description: 'Test related changes' },
+            { name: 'area: documentation', color: '0075ca', description: 'Documentation changes' },
+            { name: 'area: config', color: 'fef2c0', description: 'Configuration changes' },
+            { name: 'dependencies', color: '0366d6', description: 'Dependency updates' },
+            { name: 'size: small', color: 'c2e0c6', description: 'Small change (1-2 files)' },
+            { name: 'size: medium', color: 'ffd33d', description: 'Medium change (3-10 files)' },
+            { name: 'size: large', color: 'd73a4a', description: 'Large change (10+ files)' },
+            { name: 'type: feature', color: '0e8a16', description: 'New feature' },
+            { name: 'type: bugfix', color: 'd93f0b', description: 'Bug fix' },
+            { name: 'type: hotfix', color: 'b60205', description: 'Hotfix' },
+            { name: 'type: refactor', color: '5319e7', description: 'Code refactoring' },
+            { name: 'bug', color: 'd73a4a', description: 'Bug report' },
+            { name: 'feature', color: '0e8a16', description: 'New feature request' },
+            { name: 'enhancement', color: 'a2eeef', description: 'Enhancement' },
+            { name: 'refactor', color: '5319e7', description: 'Refactoring' },
+            { name: 'documentation', color: '0075ca', description: 'Documentation' },
+            { name: 'breaking-change', color: 'b60205', description: 'Breaking change' },
+            { name: 'security', color: 'ee0701', description: 'Security issue' },
+            { name: 'performance', color: 'fbca04', description: 'Performance improvement' },
+            { name: 'hotfix', color: 'b60205', description: 'Hotfix' },
+            { name: 'priority: critical', color: 'b60205', description: 'Critical priority' },
+            { name: 'priority: high', color: 'd93f0b', description: 'High priority' },
+            { name: 'priority: low', color: '0e8a16', description: 'Low priority' }
+          ];
+
+          // 기존 라벨 가져오기
+          const { data: existingLabels } = await github.rest.issues.listLabelsForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+          });
+
+          const existingLabelNames = existingLabels.map(label => label.name);
+
+          // 존재하지 않는 라벨만 생성
+          for (const label of labelsToCreate) {
+            if (!existingLabelNames.includes(label.name)) {
+              try {
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: label.name,
+                  color: label.color,
+                  description: label.description
+                });
+                console.log(`Created label: ${label.name}`);
+              } catch (error) {
+                console.log(`Failed to create label ${label.name}: ${error.message}`);
+              }
+            }
+          }
+
+    - name: 라벨 적용
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const labels = ${{ steps.label-list.outputs.result }};
+          
+          if (labels && labels.length > 0) {
+            try {
+              await github.rest.issues.setLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                labels: labels
+              });
+              
+              console.log(`적용된 라벨: ${labels.join(', ')}`);
+              
+              // 라벨 적용 완료 댓글
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `🏷️ **자동 라벨링 완료**\n\n다음 라벨들이 자동으로 적용되었습니다:\n${labels.map(label => `\`${label}\``).join(', ')}\n\n라벨은 변경된 파일과 PR 제목/내용을 분석하여 자동으로 할당되었습니다.\n\n---\n🤖 자동 라벨링 시스템`
+              });
+            } catch (error) {
+              console.log(`라벨 적용 실패: ${error.message}`);
+            }
+          } 

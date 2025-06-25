@@ -1,0 +1,315 @@
+name: PR 자동 코드 리뷰
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  workflow_run:
+    workflows: ["테스트 자동 실행"]
+    types: [completed]
+
+jobs:
+  code-review:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request')
+    
+    steps:
+    - name: 코드 체크아웃
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: PR 정보 가져오기
+      id: pr-info
+      uses: actions/github-script@v7
+      with:
+        script: |
+          let prNumber;
+          if (context.eventName === 'pull_request') {
+            prNumber = context.issue.number;
+          } else {
+            // workflow_run 이벤트의 경우
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: context.payload.workflow_run.workflow_id,
+              status: 'completed'
+            });
+            
+            const run = runs.data.workflow_runs.find(r => r.id === context.payload.workflow_run.id);
+            if (run && run.pull_requests.length > 0) {
+              prNumber = run.pull_requests[0].number;
+            } else {
+              console.log('PR 정보를 찾을 수 없습니다.');
+              return;
+            }
+          }
+          
+          const { data: pr } = await github.rest.pulls.get({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: prNumber,
+          });
+          
+          return {
+            number: prNumber,
+            title: pr.title,
+            body: pr.body,
+            base: pr.base.ref,
+            head: pr.head.ref,
+            author: pr.user.login
+          };
+
+    - name: 변경된 파일 분석
+      id: changed-files
+      uses: tj-actions/changed-files@v40
+      with:
+        files_yaml: |
+          python:
+            - '**/*.py'
+          tests:
+            - 'tests/**'
+          config:
+            - '**/*.yml'
+            - '**/*.yaml'
+            - 'config.py'
+          requirements:
+            - 'requirements*.txt'
+
+    - name: Python 환경 설정
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: 코드 품질 검사 도구 설치
+      run: |
+        pip install flake8 pylint bandit safety mypy black isort
+        pip install -r requirements.txt
+
+    - name: 코드 스타일 검사 (Black)
+      id: black-check
+      run: |
+        if [ "${{ steps.changed-files.outputs.python_any_changed }}" == "true" ]; then
+          echo "python_files_changed=true" >> $GITHUB_OUTPUT
+          black --check --diff ${{ steps.changed-files.outputs.python_all_changed_files }} > black_report.txt 2>&1 || echo "black_issues=true" >> $GITHUB_OUTPUT
+        else
+          echo "python_files_changed=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Import 정렬 검사 (isort)
+      id: isort-check
+      run: |
+        if [ "${{ steps.changed-files.outputs.python_any_changed }}" == "true" ]; then
+          isort --check-only --diff ${{ steps.changed-files.outputs.python_all_changed_files }} > isort_report.txt 2>&1 || echo "isort_issues=true" >> $GITHUB_OUTPUT
+        fi
+
+    - name: 린트 검사 (flake8)
+      id: flake8-check
+      run: |
+        if [ "${{ steps.changed-files.outputs.python_any_changed }}" == "true" ]; then
+          flake8 ${{ steps.changed-files.outputs.python_all_changed_files }} --format='%(path)s:%(row)d:%(col)d: %(code)s %(text)s' > flake8_report.txt 2>&1 || echo "flake8_issues=true" >> $GITHUB_OUTPUT
+        fi
+
+    - name: 코드 복잡도 검사 (pylint)
+      id: pylint-check
+      run: |
+        if [ "${{ steps.changed-files.outputs.python_any_changed }}" == "true" ]; then
+          pylint ${{ steps.changed-files.outputs.python_all_changed_files }} --output-format=text --score=yes > pylint_report.txt 2>&1 || echo "pylint_issues=true" >> $GITHUB_OUTPUT
+        fi
+
+    - name: 보안 검사 (bandit)
+      id: bandit-check
+      run: |
+        if [ "${{ steps.changed-files.outputs.python_any_changed }}" == "true" ]; then
+          bandit -r ${{ steps.changed-files.outputs.python_all_changed_files }} -f txt > bandit_report.txt 2>&1 || echo "bandit_issues=true" >> $GITHUB_OUTPUT
+        fi
+
+    - name: 타입 검사 (mypy)
+      id: mypy-check
+      run: |
+        if [ "${{ steps.changed-files.outputs.python_any_changed }}" == "true" ]; then
+          mypy ${{ steps.changed-files.outputs.python_all_changed_files }} > mypy_report.txt 2>&1 || echo "mypy_issues=true" >> $GITHUB_OUTPUT
+        fi
+
+    - name: 의존성 보안 검사 (safety)
+      id: safety-check
+      run: |
+        if [ "${{ steps.changed-files.outputs.requirements_any_changed }}" == "true" ]; then
+          safety check > safety_report.txt 2>&1 || echo "safety_issues=true" >> $GITHUB_OUTPUT
+        fi
+
+    - name: 테스트 커버리지 확인
+      id: coverage-check
+      run: |
+        if [ "${{ steps.changed-files.outputs.python_any_changed }}" == "true" ]; then
+          if [ -d "tests/" ]; then
+            pip install pytest-cov
+            pytest tests/ --cov=. --cov-report=term --cov-report=json > coverage_report.txt 2>&1 || echo "coverage_issues=true" >> $GITHUB_OUTPUT
+            if [ -f "coverage.json" ]; then
+              coverage_percent=$(python -c "import json; data=json.load(open('coverage.json')); print(f\"{data['totals']['percent_covered']:.1f}\")")
+              echo "coverage_percent=$coverage_percent" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "coverage_percent=0" >> $GITHUB_OUTPUT
+            echo "no_tests=true" >> $GITHUB_OUTPUT
+          fi
+        fi
+
+    - name: 코드 리뷰 댓글 생성
+      uses: actions/github-script@v7
+      with:
+        script: |
+          if (!${{ steps.pr-info.outputs.result }}) {
+            console.log('PR 정보가 없어 리뷰를 건너뜁니다.');
+            return;
+          }
+          
+          const prInfo = ${{ steps.pr-info.outputs.result }};
+          const prNumber = prInfo.number;
+          
+          // 기존 리뷰 댓글 확인
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: prNumber,
+          });
+
+          const existingReview = comments.find(comment => 
+            comment.user.type === 'Bot' && 
+            comment.body.includes('🤖 자동 코드 리뷰 보고서')
+          );
+
+          let reviewSummary = `# 🤖 자동 코드 리뷰 보고서\n\n`;
+          reviewSummary += `**PR**: #${prNumber} - ${prInfo.title}\n`;
+          reviewSummary += `**작성자**: @${prInfo.author}\n`;
+          reviewSummary += `**브랜치**: \`${prInfo.head}\` → \`${prInfo.base}\`\n\n`;
+
+          // 변경 파일 정보
+          const pythonChanged = '${{ steps.changed-files.outputs.python_any_changed }}' === 'true';
+          const testsChanged = '${{ steps.changed-files.outputs.tests_any_changed }}' === 'true';
+          
+          if (pythonChanged) {
+            reviewSummary += `## 📊 코드 분석 결과\n\n`;
+            
+            // 코드 스타일 (Black)
+            const blackIssues = '${{ steps.black-check.outputs.black_issues }}' === 'true';
+            reviewSummary += `### 🎨 코드 스타일 (Black)\n`;
+            if (blackIssues) {
+              reviewSummary += `❌ **코드 포맷팅 개선 필요**\n`;
+              reviewSummary += `\`\`\`\n`;
+              reviewSummary += `black 포맷팅 규칙에 맞지 않는 코드가 발견되었습니다.\n`;
+              reviewSummary += `해결방법: black . 명령어를 실행하여 자동 포맷팅을 적용하세요.\n`;
+              reviewSummary += `\`\`\`\n\n`;
+            } else {
+              reviewSummary += `✅ **코드 포맷팅 양호**\n\n`;
+            }
+
+            // Import 정렬 (isort)
+            const isortIssues = '${{ steps.isort-check.outputs.isort_issues }}' === 'true';
+            reviewSummary += `### 📦 Import 정렬 (isort)\n`;
+            if (isortIssues) {
+              reviewSummary += `❌ **Import 정렬 개선 필요**\n`;
+              reviewSummary += `해결방법: \`isort .\` 명령어를 실행하여 import를 정렬하세요.\n\n`;
+            } else {
+              reviewSummary += `✅ **Import 정렬 양호**\n\n`;
+            }
+
+            // 린트 검사 (flake8)
+            const flake8Issues = '${{ steps.flake8-check.outputs.flake8_issues }}' === 'true';
+            reviewSummary += `### 🔍 코드 품질 (flake8)\n`;
+            if (flake8Issues) {
+              reviewSummary += `⚠️ **코딩 규칙 위반 발견**\n`;
+              reviewSummary += `PEP 8 스타일 가이드를 따르지 않는 코드가 있습니다.\n\n`;
+            } else {
+              reviewSummary += `✅ **코딩 규칙 준수**\n\n`;
+            }
+
+            // 보안 검사 (bandit)
+            const banditIssues = '${{ steps.bandit-check.outputs.bandit_issues }}' === 'true';
+            reviewSummary += `### 🔒 보안 검사 (bandit)\n`;
+            if (banditIssues) {
+              reviewSummary += `🚨 **보안 취약점 발견**\n`;
+              reviewSummary += `코드에서 잠재적인 보안 문제가 발견되었습니다. 상세 내용을 확인하고 수정해주세요.\n\n`;
+            } else {
+              reviewSummary += `✅ **보안 검사 통과**\n\n`;
+            }
+
+            // 타입 검사 (mypy)
+            const mypyIssues = '${{ steps.mypy-check.outputs.mypy_issues }}' === 'true';
+            reviewSummary += `### 🏷️ 타입 검사 (mypy)\n`;
+            if (mypyIssues) {
+              reviewSummary += `⚠️ **타입 힌트 개선 필요**\n`;
+              reviewSummary += `타입 관련 문제가 발견되었습니다. 타입 힌트를 추가하거나 수정해주세요.\n\n`;
+            } else {
+              reviewSummary += `✅ **타입 검사 통과**\n\n`;
+            }
+
+            // 테스트 커버리지
+            const coveragePercent = '${{ steps.coverage-check.outputs.coverage_percent }}';
+            const noTests = '${{ steps.coverage-check.outputs.no_tests }}' === 'true';
+            
+            reviewSummary += `### 🧪 테스트 커버리지\n`;
+            if (noTests) {
+              reviewSummary += `❌ **테스트 없음**\n`;
+              reviewSummary += `테스트 디렉토리가 없거나 테스트 코드가 없습니다. TDD 원칙에 따라 테스트 코드를 작성해주세요.\n\n`;
+            } else if (coveragePercent) {
+              const coverage = parseFloat(coveragePercent);
+              if (coverage < 80) {
+                reviewSummary += `⚠️ **커버리지 부족: ${coverage}%**\n`;
+                reviewSummary += `권장 커버리지(80%) 미달입니다. 추가 테스트 코드를 작성해주세요.\n\n`;
+              } else {
+                reviewSummary += `✅ **커버리지 양호: ${coverage}%**\n\n`;
+              }
+            }
+
+            // 의존성 보안 검사
+            const safetyIssues = '${{ steps.safety-check.outputs.safety_issues }}' === 'true';
+            if ('${{ steps.changed-files.outputs.requirements_any_changed }}' === 'true') {
+              reviewSummary += `### 📦 의존성 보안 (safety)\n`;
+              if (safetyIssues) {
+                reviewSummary += `🚨 **취약한 의존성 발견**\n`;
+                reviewSummary += `보안 취약점이 있는 패키지가 발견되었습니다. 최신 버전으로 업데이트하세요.\n\n`;
+              } else {
+                reviewSummary += `✅ **의존성 보안 양호**\n\n`;
+              }
+            }
+          }
+
+          // 추천 사항
+          reviewSummary += `## 💡 추천 사항\n\n`;
+          
+          if (!testsChanged && pythonChanged) {
+            reviewSummary += `- 🧪 **테스트 코드 추가**: Python 코드가 변경되었지만 테스트 파일이 수정되지 않았습니다. TDD 원칙에 따라 테스트 코드를 추가해주세요.\n`;
+          }
+          
+          reviewSummary += `- 📖 **문서 업데이트**: 새로운 기능이나 변경사항에 대한 문서 업데이트를 확인해주세요.\n`;
+          reviewSummary += `- 🔄 **코드 리뷰**: 동료 개발자의 코드 리뷰를 받아보세요.\n`;
+          reviewSummary += `- 🏗️ **SOLID 원칙**: 코드가 SOLID 원칙을 준수하는지 확인해주세요.\n`;
+          reviewSummary += `- 🧹 **Clean Architecture**: Clean Architecture 패턴을 따르고 있는지 검토해주세요.\n\n`;
+
+          reviewSummary += `---\n`;
+          reviewSummary += `🤖 이 리뷰는 자동으로 생성되었습니다. 상세한 리포트는 Actions 탭에서 확인할 수 있습니다.`;
+
+          if (existingReview) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existingReview.id,
+              body: reviewSummary
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: reviewSummary
+            });
+          }
+
+    - name: 상세 리포트 아티팩트 업로드
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: code-review-reports
+        path: |
+          *_report.txt
+          coverage.json 
