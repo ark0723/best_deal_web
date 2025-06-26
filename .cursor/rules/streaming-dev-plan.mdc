@@ -1,0 +1,67 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 실시간 스트리밍 챗봇 개발 계획
+
+## 개요
+기존 [backend/routes.py](mdc:backend/routes.py)와 [frontend/app.py](mdc:frontend/app.py)를 실시간 스트리밍 방식으로 전환하여 사용자에게 더 나은 응답 경험을 제공합니다.
+
+## 구현 항목
+
+### 1. 백엔드 스트리밍 구현
+- **SSE 엔드포인트 추가**: `/chat/stream` 경로로 Server-Sent Events 스트리밍 응답 제공
+- **토큰 단위 스트리밍**: AI 응답을 토큰별로 실시간 전송하여 즉각적인 피드백 제공
+- **연결 상태 관리**: 클라이언트 연결 추적 및 예외 상황 처리
+- **메모리 관리**: 스트리밍 중 메모리 효율성을 위한 청크 단위 응답 전송
+
+### 2. 프론트엔드 스트리밍 수신
+- **SSE 클라이언트**: EventSource API를 사용한 실시간 응답 수신
+- **점진적 UI 업데이트**: 토큰 수신 시마다 채팅 UI 실시간 업데이트
+- **연결 오류 처리**: 네트워크 문제 시 자동 재연결 및 오류 표시
+- **로딩 상태 관리**: 스트리밍 진행 상태를 시각적으로 표시
+
+### 3. MCP 통합 최적화
+- **비동기 MCP 호출**: Context7 MCP 도구 호출을 비동기로 처리하여 블로킹 방지
+- **병렬 처리**: 여러 MCP 도구를 동시에 호출하여 응답 속도 개선
+- **스트리밍 중 도구 호출**: 필요 시 스트리밍 중에도 추가 정보 검색 가능
+
+## 기술 스택 및 라이브러리
+
+### 백엔드 (FastAPI 기반)
+- **FastAPI StreamingResponse**: HTTP 스트리밍 응답 처리
+- **asyncio**: 비동기 프로그래밍으로 성능 최적화
+- **SSE (Server-Sent Events)**: 단방향 실시간 데이터 전송
+- **pydantic**: 데이터 검증 및 시리얼라이제이션
+
+### 프론트엔드 (Streamlit 기반)
+- **streamlit**: 기존 Streamlit 기반 UI 유지
+- **JavaScript EventSource**: 브라우저 내장 SSE 클라이언트
+- **st.empty()**: 동적 컨텐츠 업데이트를 위한 플레이스홀더
+- **HTML/JavaScript 컴포넌트**: Streamlit 내 커스텀 스트리밍 UI
+
+### MCP 및 AI
+- **Context7 MCP**: [mcp_context7_get-library-docs](mdc:agent/tools.py) 함수 활용
+- **LangChain**: 기존 AI 에이전트 [agent/agent.py](mdc:agent/agent.py) 유지
+- **LangGraph**: 멀티턴 대화 상태 관리
+
+## 개발 계획
+
+1. **SSE 백엔드 엔드포인트 구현**
+2. **비동기 AI 응답 스트리밍 로직 개발**
+3. **프론트엔드 EventSource 클라이언트 구현**
+4. **실시간 UI 업데이트 메커니즘 구축**
+5. **연결 상태 관리 및 오류 처리**
+6. **MCP 도구 비동기 통합**
+7. **토큰 레벨 응답 최적화**
+8. **스트리밍 성능 테스트**
+9. **사용자 경험 개선**
+10. **통합 테스트 및 배포**
+
+## 참고 파일
+- 기존 채팅 로직: [backend/routes.py](mdc:backend/routes.py)
+- 프론트엔드 UI: [frontend/app.py](mdc:frontend/app.py)
+- AI 에이전트: [agent/agent.py](mdc:agent/agent.py)
+- MCP 도구: [agent/tools.py](mdc:agent/tools.py)
+- 설정 파일: [config.py](mdc:config.py)

@@ -43,12 +43,22 @@ class ShoppingAgent:
             temperature=0.7
         )
         
-        # 도구 설정
-        self.tools = get_shopping_tools()
-        self.tool_node = ToolNode(self.tools)
-        
-        # 그래프 구성
-        self.graph = self._build_graph()
+        # 도구 설정 (async 초기화는 별도 메서드에서)
+        self.tools = []
+        self.tool_node = None
+        self.graph = None
+        self._initialized = False
+    
+    async def initialize(self):
+        """비동기 초기화"""
+        if not self._initialized:
+            # MCP 도구 로드
+            self.tools = await get_shopping_tools()
+            self.tool_node = ToolNode(self.tools)
+            
+            # 그래프 구성
+            self.graph = self._build_graph()
+            self._initialized = True
     
     def _build_graph(self) -> StateGraph:
         """대화 그래프 구성"""
@@ -216,6 +226,93 @@ class ShoppingAgent:
         except Exception:
             pass  # 메모리 저장 실패는 무시
     
+    async def _ensure_initialized(self):
+        """초기화 확인"""
+        if not self._initialized:
+            await self.initialize()
+    
+    async def process_message_stream(
+        self, 
+        message: str, 
+        session_id: str, 
+        user_id: Optional[str] = None
+    ):
+        """스트리밍 방식으로 메시지 처리"""
+        try:
+            # 초기화 확인
+            await self._ensure_initialized()
+            
+            # 설정 구성
+            config = RunnableConfig(
+                configurable={
+                    "thread_id": session_id,
+                    "user_id": user_id or "anonymous"
+                }
+            )
+            
+            # 입력 상태 구성
+            input_state = {
+                "messages": [HumanMessage(content=message)],
+                "user_id": user_id,
+                "session_preferences": {},
+                "search_history": []
+            }
+            
+            # 그래프 스트리밍 실행
+            async for event in self.graph.astream(input_state, config=config, stream_mode="updates"):
+                for node_name, data in event.items():
+                    # 에이전트 노드에서 응답 처리
+                    if node_name == "agent" and "messages" in data:
+                        last_message = data["messages"][-1]
+                        
+                        # AI 메시지 처리
+                        if isinstance(last_message, AIMessage):
+                            # 도구 호출이 있는 경우
+                            if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
+                                for tool_call in last_message.tool_calls:
+                                    yield {
+                                        "type": "tool_call",
+                                        "tool_name": tool_call["name"],
+                                        "tool_args": tool_call["args"]
+                                    }
+                            
+                            # 텍스트 응답이 있는 경우
+                            if last_message.content:
+                                # 응답을 단어별로 분할하여 스트리밍
+                                words = last_message.content.split()
+                                for i, word in enumerate(words):
+                                    yield {
+                                        "type": "content",
+                                        "content": word + " ",
+                                        "index": i,
+                                        "total": len(words)
+                                    }
+                                    await asyncio.sleep(0.02)  # 스트리밍 효과
+                    
+                    # 도구 실행 결과 처리
+                    elif node_name == "tools" and "messages" in data:
+                        for tool_message in data["messages"]:
+                            if hasattr(tool_message, 'name'):
+                                yield {
+                                    "type": "tool_result",
+                                    "tool_name": tool_message.name,
+                                    "result_preview": str(tool_message.content)[:100] + "..."
+                                }
+            
+            # 스트리밍 완료 신호
+            yield {
+                "type": "done",
+                "session_id": session_id
+            }
+            
+        except Exception as e:
+            # 오류 발생 시 에러 메시지 스트리밍
+            yield {
+                "type": "error",
+                "error": str(e),
+                "session_id": session_id
+            }
+
     async def process_message(
         self, 
         message: str, 
@@ -223,6 +320,9 @@ class ShoppingAgent:
         user_id: Optional[str] = None
     ) -> str:
         """메시지 처리 및 응답 생성"""
+        # 초기화 확인
+        await self._ensure_initialized()
+        
         # 설정 구성
         config = {
             "configurable": {

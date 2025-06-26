@@ -1,5 +1,5 @@
 """
-쇼핑 에이전트용 도구 함수들 - MCP 통합 버전
+쇼핑 에이전트용 도구 함수들
 """
 
 import asyncio
@@ -7,7 +7,6 @@ import random
 from typing import List, Dict, Any
 from langchain_core.tools import tool
 from config import settings
-from agent.mcp_tools import get_shopping_tools_with_mcp
 
 
 @tool
@@ -138,30 +137,20 @@ def filter_products(products: List[Dict[str, Any]],
     return filtered
 
 
-async def get_shopping_tools() -> List:
-    """MCP 통합 쇼핑 도구 목록 반환"""
-    try:
-        # MCP 통합 도구 가져오기
-        mcp_tools = await get_shopping_tools_with_mcp()
-        
-        # 추가 분석 도구
-        analysis_tools = [
-            compare_prices,
-            filter_products
-        ]
-        
-        return mcp_tools + analysis_tools
-        
-    except Exception as e:
-        # 에러 시 기본 도구만 반환
-        return [
-            compare_prices,
-            filter_products
-        ]
+def get_shopping_tools() -> List:
+    """쇼핑 도구 목록 반환"""
+    return [
+        search_naver_shopping,
+        search_exa,
+        compare_prices,
+        filter_products
+    ]
 
 
-# 사용 가능한 모든 툴 목록 (호환성을 위해 유지)
+# 사용 가능한 모든 툴 목록
 AVAILABLE_TOOLS = [
+    search_naver_shopping,
+    search_exa,
     compare_prices,
     filter_products
 ] 

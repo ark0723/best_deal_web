@@ -4,6 +4,7 @@ uvicorn
 streamlit
 pydantic
 python-multipart
+requests
 
 # AI/ML Libraries
 langchain
@@ -15,6 +16,7 @@ langchain-community
 # MCP Dependencies
 mcp
 httpx
+langchain-mcp-adapters
 
 # Testing
 pytest
@@ -22,4 +24,5 @@ pytest-asyncio
 pytest-mock
 
 # Utilities
-python-dotenv 
+python-dotenv
+aiohttp 
